@@ -15,7 +15,7 @@ import { YAMLValidation } from "./services/yamlValidation";
 import { format } from './services/yamlFormatter';
 import { JSONWorkerContribution } from './jsonContributions';
 import { YAMLDocument } from './parser/yamlParser';
-import { YAMLTraversal, YamlNodeInfo, YamlNodePropertyValues } from './services/yamlTraversal';
+import { YAMLTraversal, YamlNodeInfo, YamlNodePropertyValues, YamlObjectNode } from './services/yamlTraversal';
 
 export interface LanguageSettings {
   validate?: boolean; //Setting for whether we want to validate the schema
@@ -104,6 +104,7 @@ export interface LanguageService {
   resetSchema(uri: string): boolean;
   doFormat(document: TextDocument, options: FormattingOptions, customTags: Array<String>): TextEdit[];
   findNodes(document: TextDocument, doc: YAMLDocument, key: string): Thenable<YamlNodeInfo[]>;
+  getObjectTree(document: TextDocument, doc: YAMLDocument): Thenable<YamlObjectNode>;
   getNodePropertyValues(document: TextDocument, doc: YAMLDocument, position: Position, propertyName: string): YamlNodePropertyValues;
 }
 
@@ -144,6 +145,7 @@ export function getLanguageService(
       resetSchema: (uri: string) => schemaService.onResourceChange(uri),
       doFormat: format,
       findNodes: yamlTraversal.findNodes.bind(yamlTraversal),
+      getObjectTree: yamlTraversal.getObjectTree.bind(yamlTraversal),
       getNodePropertyValues: yamlTraversal.getNodePropertyValues.bind(yamlTraversal)
   }
 }

@@ -18,6 +18,7 @@ import { CompletionItem, CompletionItemKind, CompletionList, TextDocument, Posit
 
 import * as nls from 'vscode-nls';
 import { YAMLDocument, SingleYAMLDocument } from '../parser/yamlParser';
+import { YAMLTraversal } from './yamlTraversal';
 
 const localize = nls.loadMessageBundle();
 
@@ -52,11 +53,13 @@ export class YAMLCompletion {
     }
 
     public doComplete(document: TextDocument, position: Position, yamlDocument: YAMLDocument): Thenable<CompletionList> {
-
         let result: CompletionList = {
             items: [],
             isIncomplete: false
         };
+
+        var blah = new YAMLTraversal(this.promise);
+        blah.getObjectTree(document, yamlDocument);
 
         const offset = document.offsetAt(position);
         if (document.getText()[offset] === ":") {

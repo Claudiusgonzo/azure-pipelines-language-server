@@ -16,12 +16,136 @@ export interface YamlNodePropertyValues {
     values: {[key: string]: string};
 }
 
+export interface YamlObjectNode {
+    key: string;
+    value: string;
+    children: YamlObjectNode[];
+    startPosition: Position;
+    endPosition: Position;
+    isArray?: boolean;
+}
+
 export class YAMLTraversal {
 
     private promise: PromiseConstructor;
 
     constructor(promiseConstructor: PromiseConstructor) {
         this.promise = promiseConstructor || Promise;
+    }
+
+    public getObjectTree(document: TextDocument, yamlDocument: YAMLDocument): Thenable<YamlObjectNode | undefined> {
+        const jsonDocument = yamlDocument.documents.length > 0 ? yamlDocument.documents[0] : null;
+        let nodeMap: {[key: number]: YamlObjectNode} = {};
+        let root: YamlObjectNode = {
+            key: "root",
+            value: "root",
+            children: [],
+            startPosition: document.positionAt(jsonDocument.root.start),
+            endPosition: document.positionAt(jsonDocument.root.end),
+        };
+        let currentId = 0;
+        
+        jsonDocument.visit(node => {
+            if (node instanceof Parser.PropertyASTNode) {
+                let primaryKey = (node as Parser.PropertyASTNode).key.value;
+                if (primaryKey !== "stage" && primaryKey !== "task" && primaryKey !== "script" && primaryKey !== "job" && primaryKey !== "deployment") {
+                    return true;
+                }
+
+                let parentObject = node.parent;
+                while (parentObject && !nodeMap[(parentObject as any).tempId]) {
+                    parentObject = parentObject.parent;
+                }
+
+                if (parentObject) {
+                    if (nodeMap[(parentObject as any).tempId].key === "task") {
+                        return true;
+                    }
+                }
+
+                let parentObject2 = node.parent;
+                while (parentObject2 && !(parentObject2 instanceof Parser.ObjectASTNode)) {
+                    parentObject2 = parentObject2.parent;
+                }
+
+                let nodeForLength = parentObject2 && parentObject2 || node;
+                let primaryValue = (node as Parser.PropertyASTNode).value.getValue();
+                let nodeId = currentId++;
+                (node as any).tempId = nodeId;
+                let yamlNode = {
+                    key: primaryKey,
+                    value: primaryValue,
+                    children: [],
+                    startPosition: document.positionAt(nodeForLength.start),
+                    endPosition: document.positionAt(nodeForLength.end),
+                };
+                nodeMap[nodeId] = yamlNode;
+
+                if (parentObject) {
+                    nodeMap[(parentObject as any).tempId].children.push(yamlNode);
+                }
+                else {
+                    root.children.push(yamlNode);
+                }
+            }
+            else if (node instanceof Parser.ArrayASTNode) {
+                let location = (node as Parser.ArrayASTNode).location;
+                if (location !== "stages" && location !== "steps" && location !== "jobs") {
+                    return true;
+                }
+
+                let parentObject = node.parent;
+                while (parentObject && !nodeMap[(parentObject as any).tempId]) {
+                    parentObject = parentObject.parent;
+                }
+
+                let nodeId = currentId++;
+                (node as any).tempId = nodeId;
+                let yamlNode = {
+                    key: location,
+                    value: null,
+                    children: [],
+                    startPosition: document.positionAt(node.start),
+                    endPosition: document.positionAt(node.end),
+                    isArray: true
+                };
+                nodeMap[nodeId] = yamlNode;
+
+                if (parentObject) {
+                    nodeMap[(parentObject as any).tempId].children.push(yamlNode);
+                }
+                else {
+                    root.children.push(yamlNode);
+                }
+            }
+
+            return true;
+        });
+
+        this._flattenArrays(root);
+
+        return this.promise.resolve(root);
+    }
+
+    private _flattenArrays = (node: YamlObjectNode) => {
+        node.children.forEach(this._flattenArrays);
+
+        let newChildren: YamlObjectNode[] = [];
+        if (node.children.length === 1 && node.children[0].isArray) {
+            newChildren = node.children[0].children;
+        }
+        else {
+            for (let i = 0; i < node.children.length; ++ i) {
+                if (node.children[i].isArray && i !== 0) {
+                    node.children[i - 1].children = node.children[i - 1].children.concat(node.children[i].children);
+                }
+                else {
+                    newChildren.push(node.children[i]);
+                }
+            }
+        }
+
+        node.children = newChildren;
     }
 
     public findNodes(document: TextDocument, yamlDocument: YAMLDocument, key: string): Thenable<YamlNodeInfo[]> {
